@@ -1,0 +1,182 @@
+
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transfers με Συμβόλαιο</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111;}
+    header{background:#111827;color:#fff;padding:12px 16px}
+    .wrap{display:grid;grid-template-columns:1.2fr 1.8fr;gap:16px;padding:16px}
+    .card{background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);padding:12px 14px}
+    .list{max-height:72vh;overflow:auto}
+    .item{padding:10px;border-bottom:1px solid #eee;cursor:pointer}
+    .item:hover{background:#fafafa}
+    label{font-size:12px;color:#555;display:block;margin:10px 0 4px}
+    input, textarea{width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    button{padding:10px 14px;border:none;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer}
+    .ghost{background:#e5e7eb;color:#111}
+    .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px}
+  </style>
+</head>
+<body>
+<header><strong>Transfers με Συμβόλαιο</strong></header>
+<div class="wrap">
+  <div class="card">
+    <div class="toolbar">
+      <div>
+        <label>Ημερομηνία</label>
+        <input id="filterDate" type="date">
+      </div>
+      <div>
+        <button id="btnNew" class="ghost">+ Νέο</button>
+      </div>
+    </div>
+    <div id="list" class="list"></div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar"><strong>Φόρμα Συμβολαίου</strong>
+      <div style="display:flex;gap:8px">
+        <button id="btnSave">Αποθήκευση</button>
+        <button id="btnPDF" class="ghost">Εκτύπωση Συμβολαίου (PDF)</button>
+      </div>
+    </div>
+    <div class="row">
+      <div><label>Όνομα Πελάτη</label><input id="customer_name" required></div>
+      <div><label>ΑΦΜ/ID/Διαβατήριο</label><input id="customer_id_doc"></div>
+    </div>
+    <div class="row">
+      <div><label>Επιβάτης</label><input id="passenger_name"></div>
+      <div><label>Άτομα</label><input id="pax" type="number" min="1" value="1"></div>
+    </div>
+    <div class="row">
+      <div><label>Οδηγός</label><input id="driver_name"></div>
+      <div><label>Αρ. Ταυτότητας Οδηγού</label><input id="driver_id"></div>
+    </div>
+    <div class="row">
+      <div><label>Αρ. Διπλώματος</label><input id="driver_license"></div>
+      <div><label>Πινακίδα</label><input id="vehicle_plate"></div>
+    </div>
+    <div class="row">
+      <div><label>Μάρκα</label><input id="vehicle_make"></div>
+      <div><label>Μοντέλο</label><input id="vehicle_model"></div>
+    </div>
+    <div class="row">
+      <div><label>Ημ/νία Συμφωνητικού</label><input id="contract_date" type="datetime-local"></div>
+      <div></div>
+    </div>
+    <div class="row">
+      <div><label>Έναρξη</label><input id="pickup_dt" type="datetime-local"></div>
+      <div><label>Λήξη</label><input id="dropoff_dt" type="datetime-local"></div>
+    </div>
+    <div class="row">
+      <div><label>Σημείο Έναρξης</label><input id="pickup_address"></div>
+      <div><label>Σημείο Επιβίβασης</label><input id="dropoff_address"></div>
+    </div>
+    <div><label>Τιμή (€)</label><input id="price" type="number" step="0.01"></div>
+    <div><label>Παρατηρήσεις</label><textarea id="notes" rows="3"></textarea></div>
+    <input type="hidden" id="booking_id">
+  </div>
+</div>
+<script>
+const API = "http://127.0.0.1:8000";
+const $ = (id)=>document.getElementById(id);
+function toISO(v){ return v ? new Date(v).toISOString() : null; }
+function toLocal(dt){ if(!dt) return ""; const d = new Date(dt); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16); }
+
+function formData(){
+  return {
+    customer_name: $('customer_name').value,
+    customer_id_doc: $('customer_id_doc').value || null,
+    passenger_name: $('passenger_name').value || null,
+    pax: parseInt($('pax').value || "1"),
+    driver_name: $('driver_name').value || null,
+    driver_id: $('driver_id').value || null,
+    driver_license: $('driver_license').value || null,
+    vehicle_plate: $('vehicle_plate').value || null,
+    vehicle_make: $('vehicle_make').value || null,
+    vehicle_model: $('vehicle_model').value || null,
+    contract_date: toISO($('contract_date').value),
+    pickup_dt: toISO($('pickup_dt').value),
+    dropoff_dt: toISO($('dropoff_dt').value),
+    pickup_address: $('pickup_address').value || null,
+    dropoff_address: $('dropoff_address').value || null,
+    price: $('price').value ? parseFloat($('price').value) : null,
+    notes: $('notes').value || null,
+  };
+}
+
+function fillForm(b){
+  $('booking_id').value = b.id || "";
+  $('customer_name').value = b.customer_name || "";
+  $('customer_id_doc').value = b.customer_id_doc || "";
+  $('passenger_name').value = b.passenger_name || "";
+  $('pax').value = b.pax || 1;
+  $('driver_name').value = b.driver_name || "";
+  $('driver_id').value = b.driver_id || "";
+  $('driver_license').value = b.driver_license || "";
+  $('vehicle_plate').value = b.vehicle_plate || "";
+  $('vehicle_make').value = b.vehicle_make || "";
+  $('vehicle_model').value = b.vehicle_model || "";
+  $('contract_date').value = toLocal(b.contract_date);
+  $('pickup_dt').value = toLocal(b.pickup_dt);
+  $('dropoff_dt').value = toLocal(b.dropoff_dt);
+  $('pickup_address').value = b.pickup_address || "";
+  $('dropoff_address').value = b.dropoff_address || "";
+  $('price').value = b.price ?? "";
+  $('notes').value = b.notes || "";
+}
+
+function clearForm(){ fillForm({pax:1}); }
+
+async function loadList(){
+  const d = $('filterDate').value;
+  const url = d ? `${API}/bookings?date=${new Date(d).toISOString()}` : `${API}/bookings`;
+  const res = await fetch(url); const items = await res.json();
+  const list = $('list'); list.innerHTML = "";
+  if(!items.length){ list.innerHTML = "<div class='item' style='color:#888'>Δεν υπάρχουν transfers για αυτή τη μέρα.</div>"; return; }
+  for (const b of items){
+    const div = document.createElement("div");
+    const st = b.pickup_dt ? new Date(b.pickup_dt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : "";
+    const en = b.dropoff_dt ? new Date(b.dropoff_dt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : "";
+    div.className = "item";
+    div.innerHTML = `<strong>${st}${en?("–"+en):""}</strong> — ${b.customer_name} — ${b.pickup_address||""} → ${b.dropoff_address||""} ${b.price?"("+b.price+"€)":""}`;
+    div.onclick = ()=>fillForm(b);
+    list.appendChild(div);
+  }
+}
+
+$('btnNew').onclick = ()=>{ clearForm(); $('customer_name').focus(); };
+$('filterDate').onchange = loadList;
+
+$('btnSave').onclick = async ()=>{
+  const id = $('booking_id').value;
+  const payload = formData();
+  if(!payload.pickup_dt){ alert("Βάλε ώρα Έναρξης"); return; }
+  const url = id ? `${API}/bookings/${id}` : `${API}/bookings/`;
+  const method = id ? "PUT" : "POST";
+  const res = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+  if(!res.ok){ alert("Σφάλμα αποθήκευσης"); return; }
+  const saved = await res.json(); fillForm(saved);
+  if($('filterDate').value===""){
+    const d = new Date(saved.pickup_dt); $('filterDate').value = d.toISOString().slice(0,10);
+  }
+  await loadList();
+  alert("Αποθηκεύτηκε!");
+};
+
+$('btnPDF').onclick = ()=>{
+  const id = $('booking_id').value;
+  if(!id){ alert("Πρώτα αποθήκευσε το transfer για να πάρεις PDF."); return; }
+  window.open(`${API}/bookings/${id}/contract`, "_blank");
+};
+
+// defaults
+const today = new Date(); $('filterDate').value = today.toISOString().slice(0,10);
+clearForm(); loadList();
+</script>
+</body>
+</html>
